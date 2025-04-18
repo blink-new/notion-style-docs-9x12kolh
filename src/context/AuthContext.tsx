@@ -43,6 +43,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
+      toast.success('Signed in successfully');
     } catch (error: any) {
       toast.error(error.message || 'Error signing in');
       throw error;
@@ -51,9 +52,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signUp = async (email: string, password: string) => {
     try {
-      const { error } = await supabase.auth.signUp({ email, password });
+      const { error, data } = await supabase.auth.signUp({ email, password });
       if (error) throw error;
-      toast.success('Check your email for the confirmation link');
+      
+      // With autoconfirm enabled, users are automatically signed in
+      if (data.user) {
+        toast.success('Account created successfully');
+      } else {
+        // This should rarely happen with autoconfirm enabled
+        toast.success('Check your email for the confirmation link');
+      }
     } catch (error: any) {
       toast.error(error.message || 'Error signing up');
       throw error;
@@ -64,6 +72,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
+      toast.success('Signed out successfully');
     } catch (error: any) {
       toast.error(error.message || 'Error signing out');
       throw error;
