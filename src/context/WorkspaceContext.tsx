@@ -21,6 +21,7 @@ type WorkspaceContextType = {
   deletePage: (id: string) => Promise<void>;
   reorderPages: (pageId: string, newPosition: number) => Promise<void>;
   refreshPages: () => Promise<void>;
+  refreshWorkspaces: () => Promise<void>;
 };
 
 const WorkspaceContext = createContext<WorkspaceContextType | undefined>(undefined);
@@ -54,27 +55,101 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   }, [currentWorkspace]);
 
   const fetchWorkspaces = async () => {
+    if (!user) {
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
+      
+      // First check if the user exists in the users table
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', user.id)
+        .single();
+      
+      if (userError && userError.code !== 'PGRST116') {
+        // If error is not "no rows returned", it's a real error
+        console.error('Error fetching user:', userError);
+        
+        // Try to create the user if they don't exist
+        if (userError.code === 'PGRST104') {
+          const { error: insertError } = await supabase
+            .from('users')
+            .insert({
+              id: user.id,
+              email: user.email || '',
+              display_name: user.email ? user.email.split('@')[0] : 'User'
+            });
+            
+          if (insertError) {
+            console.error('Error creating user:', insertError);
+          }
+        }
+      }
+      
+      // Now fetch workspaces
       const { data, error } = await supabase
         .from('workspaces')
         .select('*')
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error fetching workspaces:', error);
+        
+        // If no workspaces found, try to create a default one
+        if (error.code === 'PGRST104' || error.code === 'PGRST116') {
+          await createDefaultWorkspace();
+          return;
+        }
+        
+        throw error;
+      }
       
-      setWorkspaces(data || []);
+      // If no workspaces found, create a default one
+      if (!data || data.length === 0) {
+        await createDefaultWorkspace();
+        return;
+      }
+      
+      setWorkspaces(data);
       
       // Set first workspace as current if none is selected
-      if (data && data.length > 0 && !currentWorkspace) {
+      if (data.length > 0 && !currentWorkspace) {
         const firstWorkspace = data[0];
         const workspaceWithPages = { ...firstWorkspace, pages: [] };
         setCurrentWorkspace(workspaceWithPages);
       }
     } catch (error: any) {
+      console.error('Workspace fetch error:', error);
       toast.error(error.message || 'Error fetching workspaces');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const createDefaultWorkspace = async () => {
+    if (!user) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from('workspaces')
+        .insert({ name: 'My Workspace', owner_id: user.id })
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error creating default workspace:', error);
+        throw error;
+      }
+      
+      setWorkspaces([data]);
+      setCurrentWorkspace({ ...data, pages: [] });
+    } catch (error: any) {
+      console.error('Default workspace creation error:', error);
+      toast.error(error.message || 'Error creating default workspace');
     }
   };
 
@@ -87,7 +162,10 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         .eq('workspace_id', workspaceId)
         .order('position', { ascending: true });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error fetching pages:', error);
+        throw error;
+      }
       
       // Organize pages into a tree structure
       const pagesWithChildren = organizePages(data || []);
@@ -106,6 +184,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         setCurrentPage(data[0]);
       }
     } catch (error: any) {
+      console.error('Page fetch error:', error);
       toast.error(error.message || 'Error fetching pages');
     } finally {
       setLoading(false);
@@ -148,11 +227,15 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error creating workspace:', error);
+        throw error;
+      }
       
-      setWorkspaces(prev => [data, ...prev]);
+      await refreshWorkspaces();
       return data;
     } catch (error: any) {
+      console.error('Workspace creation error:', error);
       toast.error(error.message || 'Error creating workspace');
       throw error;
     }
@@ -165,7 +248,10 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         .update({ name })
         .eq('id', id);
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error updating workspace:', error);
+        throw error;
+      }
       
       setWorkspaces(prev => 
         prev.map(workspace => 
@@ -179,6 +265,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       
       toast.success('Workspace updated');
     } catch (error: any) {
+      console.error('Workspace update error:', error);
       toast.error(error.message || 'Error updating workspace');
       throw error;
     }
@@ -191,7 +278,10 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         .delete()
         .eq('id', id);
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error deleting workspace:', error);
+        throw error;
+      }
       
       setWorkspaces(prev => prev.filter(workspace => workspace.id !== id));
       
@@ -206,6 +296,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       
       toast.success('Workspace deleted');
     } catch (error: any) {
+      console.error('Workspace deletion error:', error);
       toast.error(error.message || 'Error deleting workspace');
       throw error;
     }
@@ -216,13 +307,17 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       if (!user) throw new Error('User not authenticated');
       
       // Get the highest position to place the new page at the end
-      const { data: existingPages } = await supabase
+      const { data: existingPages, error: positionError } = await supabase
         .from('pages')
         .select('position')
         .eq('workspace_id', workspaceId)
         .eq('parent_id', parentId || null)
         .order('position', { ascending: false })
         .limit(1);
+      
+      if (positionError) {
+        console.error('Error getting page positions:', positionError);
+      }
       
       const position = existingPages && existingPages.length > 0 
         ? existingPages[0].position + 1 
@@ -249,11 +344,15 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error creating page:', error);
+        throw error;
+      }
       
       await refreshPages();
       return data;
     } catch (error: any) {
+      console.error('Page creation error:', error);
       toast.error(error.message || 'Error creating page');
       throw error;
     }
@@ -266,7 +365,10 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         .update(data)
         .eq('id', id);
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error updating page:', error);
+        throw error;
+      }
       
       // Update pages state
       setPages(prev => updatePageInTree(prev, id, data));
@@ -276,6 +378,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         setCurrentPage(prev => prev ? { ...prev, ...data } : null);
       }
     } catch (error: any) {
+      console.error('Page update error:', error);
       toast.error(error.message || 'Error updating page');
       throw error;
     }
@@ -307,7 +410,10 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         .delete()
         .eq('id', id);
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error deleting page:', error);
+        throw error;
+      }
       
       // If current page is deleted, set to null
       if (currentPage?.id === id) {
@@ -317,6 +423,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       await refreshPages();
       toast.success('Page deleted');
     } catch (error: any) {
+      console.error('Page deletion error:', error);
       toast.error(error.message || 'Error deleting page');
       throw error;
     }
@@ -355,7 +462,10 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         .eq('parent_id', targetPage.parent_id)
         .order('position', { ascending: true });
         
-      if (error) throw error;
+      if (error) {
+        console.error('Error fetching sibling pages:', error);
+        throw error;
+      }
       
       // Calculate new positions
       const updatedPositions = siblings
@@ -371,16 +481,20 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       
       // Update all positions in a transaction
       for (const { id, position } of updatedPositions) {
-        const { error } = await supabase
+        const { error: updateError } = await supabase
           .from('pages')
           .update({ position })
           .eq('id', id);
           
-        if (error) throw error;
+        if (updateError) {
+          console.error(`Error updating position for page ${id}:`, updateError);
+          throw updateError;
+        }
       }
       
       await refreshPages();
     } catch (error: any) {
+      console.error('Page reordering error:', error);
       toast.error(error.message || 'Error reordering pages');
       throw error;
     }
@@ -390,6 +504,10 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     if (currentWorkspace) {
       await fetchPages(currentWorkspace.id);
     }
+  };
+
+  const refreshWorkspaces = async () => {
+    await fetchWorkspaces();
   };
 
   const value = {
@@ -408,6 +526,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     deletePage,
     reorderPages,
     refreshPages,
+    refreshWorkspaces,
   };
 
   return <WorkspaceContext.Provider value={value}>{children}</WorkspaceContext.Provider>;
