@@ -5,22 +5,13 @@ import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
 import Link from '@tiptap/extension-link';
 import Image from '@tiptap/extension-image';
-import Heading from '@tiptap/extension-heading';
 import TextAlign from '@tiptap/extension-text-align';
-import BulletList from '@tiptap/extension-bullet-list';
-import OrderedList from '@tiptap/extension-ordered-list';
 import TaskList from '@tiptap/extension-task-list';
 import TaskItem from '@tiptap/extension-task-item';
-import CodeBlock from '@tiptap/extension-code-block';
-import Blockquote from '@tiptap/extension-blockquote';
 import Highlight from '@tiptap/extension-highlight';
 import Underline from '@tiptap/extension-underline';
-import Strike from '@tiptap/extension-strike';
-import Code from '@tiptap/extension-code';
 import { useWorkspace } from '../../context/WorkspaceContext';
-import { Page } from '../../types';
 import { EditorToolbar } from './EditorToolbar';
-import { cn } from '../../lib/utils';
 import { debounce } from '../../lib/utils';
 import './editor.css';
 
@@ -31,7 +22,13 @@ export function Editor() {
 
   const editor = useEditor({
     extensions: [
-      StarterKit,
+      // StarterKit already includes: heading, bulletList, orderedList, codeBlock, blockquote, strike, code
+      // So we don't need to import them separately
+      StarterKit.configure({
+        heading: {
+          levels: [1, 2, 3],
+        },
+      }),
       Placeholder.configure({
         placeholder: 'Start writing...',
       }),
@@ -42,24 +39,15 @@ export function Editor() {
         },
       }),
       Image,
-      Heading.configure({
-        levels: [1, 2, 3],
-      }),
       TextAlign.configure({
         types: ['heading', 'paragraph'],
       }),
-      BulletList,
-      OrderedList,
       TaskList,
       TaskItem.configure({
         nested: true,
       }),
-      CodeBlock,
-      Blockquote,
       Highlight,
       Underline,
-      Strike,
-      Code,
     ],
     content: '',
     autofocus: 'end',
