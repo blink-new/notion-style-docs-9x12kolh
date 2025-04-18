@@ -32,37 +32,37 @@ export const supabaseAdmin = createClient<Database>(
   supabaseServiceKey || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9pYmN5ZWl1enVhaml4cmRrcWxqIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0NTAxMDg4NiwiZXhwIjoyMDYwNTg2ODg2fQ.hyvaANDGe49dZzK2gOaKQbERMQFYTvaLSurKlNoipsc'
 );
 
-// Get user profile by ID using the secure function
+// Get user profile by ID
 export const getUserProfile = async (userId: string) => {
-  return supabase.rpc('get_user_profile', {
+  return supabaseAdmin.rpc('get_user_profile', {
     p_user_id: userId
   });
 };
 
-// Get auth user email by ID using the secure function
+// Get auth user email by ID
 export const getAuthUserEmail = async (userId: string) => {
-  return supabase.rpc('get_auth_user_email', {
+  return supabaseAdmin.rpc('get_auth_user_email', {
     p_user_id: userId
   });
 };
 
-// Get auth user metadata by ID using the secure function
+// Get auth user metadata by ID
 export const getAuthUserMetadata = async (userId: string) => {
-  return supabase.rpc('get_auth_user_metadata', {
+  return supabaseAdmin.rpc('get_auth_user_metadata', {
     p_user_id: userId
   });
 };
 
 // Ensure user exists in the public.users table
 export const ensureUserExists = async (userId: string) => {
-  return supabase.rpc('ensure_user_exists', {
+  return supabaseAdmin.rpc('ensure_user_exists', {
     p_user_id: userId
   });
 };
 
 // Create a function to call the initialize_new_user RPC
 export const initializeNewUser = async (userId: string, workspaceName: string = 'My Workspace') => {
-  return supabase.rpc('initialize_new_user', {
+  return supabaseAdmin.rpc('initialize_new_user', {
     p_user_id: userId,
     p_workspace_name: workspaceName
   });
@@ -70,7 +70,7 @@ export const initializeNewUser = async (userId: string, workspaceName: string = 
 
 // Create a function to call the create_workspace_with_member RPC
 export const createWorkspaceWithMember = async (name: string, ownerId: string) => {
-  return supabase.rpc('create_workspace_with_member', {
+  return supabaseAdmin.rpc('create_workspace_with_member', {
     p_name: name,
     p_owner_id: ownerId
   });
@@ -82,7 +82,7 @@ export const createDefaultPage = async (
   userId: string, 
   title: string = 'Welcome to your workspace'
 ) => {
-  return supabase.rpc('create_default_page', {
+  return supabaseAdmin.rpc('create_default_page', {
     p_workspace_id: workspaceId,
     p_user_id: userId,
     p_title: title
