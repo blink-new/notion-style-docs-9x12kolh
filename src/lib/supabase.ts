@@ -2,11 +2,12 @@
 import { createClient } from '@supabase/supabase-js';
 import { Database } from '../types/supabase';
 
-// Access environment variables with proper fallback
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+// Use the correct environment variable names that match our secrets
+// For Vite, we need to use import.meta.env to access environment variables
+const supabaseUrl = import.meta.env.SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.SUPABASE_ANON_KEY;
 
-// Ensure URL is not empty before creating client
+// Validate environment variables
 if (!supabaseUrl || !supabaseAnonKey) {
   console.error('Supabase URL and Anon Key are required. Please check your environment variables.');
 }
