@@ -4,20 +4,12 @@ import { Database } from '../types/supabase';
 
 // For Vite, environment variables must be prefixed with VITE_
 // These values are injected at build time from the environment
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || import.meta.env.SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.SUPABASE_ANON_KEY;
 
 // Validate environment variables
 if (!supabaseUrl || !supabaseAnonKey) {
   console.error('Supabase URL and Anon Key are required. Please check your environment variables.');
-  // Provide fallback values from the project info for development
-  // This is a temporary solution and should be replaced with proper environment variables
-  if (!supabaseUrl) {
-    console.info('Using fallback Supabase URL');
-  }
-  if (!supabaseAnonKey) {
-    console.info('Using fallback Supabase Anon Key');
-  }
 }
 
 // Create Supabase client with the URL from Supabase project
