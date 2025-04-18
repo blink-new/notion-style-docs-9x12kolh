@@ -66,23 +66,35 @@ ALTER TABLE public.workspace_members ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.pages ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.page_shares ENABLE ROW LEVEL SECURITY;
 
+-- Drop existing policies to avoid conflicts
+DROP POLICY IF EXISTS "Users can view their own profile" ON public.users;
+DROP POLICY IF EXISTS "Users can update their own profile" ON public.users;
+DROP POLICY IF EXISTS "Workspace owners can do everything" ON public.workspaces;
+DROP POLICY IF EXISTS "Workspace members can view workspaces" ON public.workspaces;
+DROP POLICY IF EXISTS "Workspace owners can do everything with pages" ON public.pages;
+DROP POLICY IF EXISTS "Workspace members can view pages" ON public.pages;
+DROP POLICY IF EXISTS "Workspace owners can manage members" ON public.workspace_members;
+DROP POLICY IF EXISTS "Users can view workspace members" ON public.workspace_members;
+DROP POLICY IF EXISTS "Workspace owners can manage page shares" ON public.page_shares;
+DROP POLICY IF EXISTS "Anyone can view page shares" ON public.page_shares;
+
 -- Create RLS policies
 
 -- Users table policies
-CREATE POLICY IF NOT EXISTS "Users can view their own profile"
+CREATE POLICY "Users can view their own profile"
   ON public.users FOR SELECT
   USING (auth.uid() = id);
 
-CREATE POLICY IF NOT EXISTS "Users can update their own profile"
+CREATE POLICY "Users can update their own profile"
   ON public.users FOR UPDATE
   USING (auth.uid() = id);
 
 -- Workspaces table policies
-CREATE POLICY IF NOT EXISTS "Workspace owners can do everything"
+CREATE POLICY "Workspace owners can do everything"
   ON public.workspaces
   USING (owner_id = auth.uid());
 
-CREATE POLICY IF NOT EXISTS "Workspace members can view workspaces"
+CREATE POLICY "Workspace members can view workspaces"
   ON public.workspaces FOR SELECT
   USING (
     EXISTS (
@@ -93,7 +105,7 @@ CREATE POLICY IF NOT EXISTS "Workspace members can view workspaces"
   );
 
 -- Pages table policies
-CREATE POLICY IF NOT EXISTS "Workspace owners can do everything with pages"
+CREATE POLICY "Workspace owners can do everything with pages"
   ON public.pages
   USING (
     EXISTS (
@@ -103,7 +115,7 @@ CREATE POLICY IF NOT EXISTS "Workspace owners can do everything with pages"
     )
   );
 
-CREATE POLICY IF NOT EXISTS "Workspace members can view pages"
+CREATE POLICY "Workspace members can view pages"
   ON public.pages FOR SELECT
   USING (
     EXISTS (
@@ -114,7 +126,7 @@ CREATE POLICY IF NOT EXISTS "Workspace members can view pages"
   );
 
 -- Workspace members table policies
-CREATE POLICY IF NOT EXISTS "Workspace owners can manage members"
+CREATE POLICY "Workspace owners can manage members"
   ON public.workspace_members
   USING (
     EXISTS (
@@ -124,7 +136,7 @@ CREATE POLICY IF NOT EXISTS "Workspace owners can manage members"
     )
   );
 
-CREATE POLICY IF NOT EXISTS "Users can view workspace members"
+CREATE POLICY "Users can view workspace members"
   ON public.workspace_members FOR SELECT
   USING (
     EXISTS (
@@ -135,7 +147,7 @@ CREATE POLICY IF NOT EXISTS "Users can view workspace members"
   );
 
 -- Page shares table policies
-CREATE POLICY IF NOT EXISTS "Workspace owners can manage page shares"
+CREATE POLICY "Workspace owners can manage page shares"
   ON public.page_shares
   USING (
     EXISTS (
@@ -146,7 +158,7 @@ CREATE POLICY IF NOT EXISTS "Workspace owners can manage page shares"
     )
   );
 
-CREATE POLICY IF NOT EXISTS "Anyone can view page shares"
+CREATE POLICY "Anyone can view page shares"
   ON public.page_shares FOR SELECT
   USING (true);
 
