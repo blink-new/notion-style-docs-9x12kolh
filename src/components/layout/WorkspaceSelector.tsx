@@ -19,27 +19,50 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '../ui/dropdown-menu';
-import { ChevronDown, Plus } from 'lucide-react';
+import { ChevronDown, Plus, Loader2 } from 'lucide-react';
+import { toast } from 'react-hot-toast';
 
 export function WorkspaceSelector() {
   const { workspaces, currentWorkspace, setCurrentWorkspace, createWorkspace } = useWorkspace();
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [newWorkspaceName, setNewWorkspaceName] = useState('');
   const [isCreating, setIsCreating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleCreateWorkspace = async () => {
-    if (!newWorkspaceName.trim()) return;
+    if (!newWorkspaceName.trim()) {
+      setError('Workspace name cannot be empty');
+      return;
+    }
     
     try {
+      setError(null);
       setIsCreating(true);
+      
+      // Show a loading toast
+      const loadingToast = toast.loading('Creating workspace...');
+      
       const workspace = await createWorkspace(newWorkspaceName);
+      
+      // Dismiss the loading toast and show success
+      toast.dismiss(loadingToast);
+      toast.success('Workspace created successfully!');
+      
       setCurrentWorkspace(workspace);
       setIsCreateDialogOpen(false);
       setNewWorkspaceName('');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error creating workspace:', error);
+      setError(error.message || 'Failed to create workspace. Please try again.');
+      toast.error('Error creating workspace. Please try again.');
     } finally {
       setIsCreating(false);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !isCreating && newWorkspaceName.trim()) {
+      handleCreateWorkspace();
     }
   };
 
@@ -81,22 +104,44 @@ export function WorkspaceSelector() {
                   <Input
                     placeholder="Workspace name"
                     value={newWorkspaceName}
-                    onChange={(e) => setNewWorkspaceName(e.target.value)}
+                    onChange={(e) => {
+                      setNewWorkspaceName(e.target.value);
+                      setError(null); // Clear error when typing
+                    }}
+                    onKeyDown={handleKeyDown}
+                    className={error ? "border-red-500" : ""}
+                    autoFocus
                   />
+                  {error && (
+                    <p className="text-sm text-red-500">{error}</p>
+                  )}
                 </div>
               </div>
               <DialogFooter>
                 <Button
                   variant="outline"
-                  onClick={() => setIsCreateDialogOpen(false)}
+                  onClick={() => {
+                    setIsCreateDialogOpen(false);
+                    setError(null);
+                    setNewWorkspaceName('');
+                  }}
+                  disabled={isCreating}
                 >
                   Cancel
                 </Button>
                 <Button
                   onClick={handleCreateWorkspace}
                   disabled={!newWorkspaceName.trim() || isCreating}
+                  className="min-w-[80px]"
                 >
-                  {isCreating ? 'Creating...' : 'Create'}
+                  {isCreating ? (
+                    <span className="flex items-center">
+                      <Loader2 size={16} className="mr-2 animate-spin" />
+                      Creating...
+                    </span>
+                  ) : (
+                    'Create'
+                  )}
                 </Button>
               </DialogFooter>
             </DialogContent>
