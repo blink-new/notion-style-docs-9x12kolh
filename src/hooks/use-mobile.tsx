@@ -1,19 +1,19 @@
-import * as React from "react"
 
-const MOBILE_BREAKPOINT = 768
+import { useEffect, useState } from 'react';
+import { useMediaQuery } from 'react-responsive';
 
-export function useIsMobile() {
-  const [isMobile, setIsMobile] = React.useState<boolean | undefined>(undefined)
+export function useMobile() {
+  const [isMounted, setIsMounted] = useState(false);
+  const isMobileQuery = useMediaQuery({ maxWidth: 768 });
+  const isTabletQuery = useMediaQuery({ minWidth: 769, maxWidth: 1024 });
+  
+  // Avoid hydration mismatch by only returning the value after mounting
+  const isMobile = isMounted ? isMobileQuery : false;
+  const isTablet = isMounted ? isTabletQuery : false;
 
-  React.useEffect(() => {
-    const mql = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT - 1}px)`)
-    const onChange = () => {
-      setIsMobile(window.innerWidth < MOBILE_BREAKPOINT)
-    }
-    mql.addEventListener("change", onChange)
-    setIsMobile(window.innerWidth < MOBILE_BREAKPOINT)
-    return () => mql.removeEventListener("change", onChange)
-  }, [])
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
-  return !!isMobile
+  return { isMobile, isTablet, isMounted };
 }
