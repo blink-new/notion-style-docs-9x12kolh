@@ -1,6 +1,6 @@
 
 import { createContext, useContext, useEffect, useState } from 'react';
-import { supabase } from '../lib/supabase';
+import { supabase, createWorkspaceWithMember, createDefaultPage } from '../lib/supabase';
 import { useAuth } from './AuthContext';
 import { Page, PageWithChildren, Workspace, WorkspaceWithPages } from '../types';
 import { toast } from 'react-hot-toast';
@@ -64,35 +64,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     try {
       setLoading(true);
       
-      // First ensure the user exists in the users table
-      try {
-        const { data: userData, error: userError } = await supabase
-          .from('users')
-          .select('*')
-          .eq('id', user.id)
-          .single();
-        
-        if (userError) {
-          console.log('User not found, creating user record');
-          
-          // Create the user if they don't exist
-          const { error: insertError } = await supabase
-            .from('users')
-            .insert({
-              id: user.id,
-              email: user.email || '',
-              display_name: user.email ? user.email.split('@')[0] : 'User'
-            });
-            
-          if (insertError) {
-            console.error('Error creating user:', insertError);
-          }
-        }
-      } catch (userCheckError) {
-        console.error('Error checking user:', userCheckError);
-      }
-      
-      // Now fetch workspaces with a more direct query
+      // Fetch all workspaces the user has access to
       const { data, error } = await supabase
         .from('workspaces')
         .select('*')
@@ -142,84 +114,47 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     try {
       console.log('Creating default workspace for user:', user.id);
       
-      // First check if the user already has any workspaces
-      const { data: existingWorkspaces, error: checkError } = await supabase
-        .from('workspaces')
-        .select('id')
-        .eq('owner_id', user.id)
-        .limit(1);
-        
-      if (checkError) {
-        console.error('Error checking existing workspaces:', checkError);
+      // Use the service role function to create a workspace
+      const { data: workspaceId, error: workspaceError } = await createWorkspaceWithMember(
+        'My Workspace',
+        user.id
+      );
+      
+      if (workspaceError) {
+        console.error('Error creating default workspace:', workspaceError);
+        throw workspaceError;
       }
       
-      // Only create a new workspace if the user doesn't have any
-      if (!existingWorkspaces || existingWorkspaces.length === 0) {
-        // Use a direct RPC call to create the workspace with service role permissions
-        const { data, error } = await supabase
-          .from('workspaces')
-          .insert({ 
-            name: 'My Workspace', 
-            owner_id: user.id 
-          })
-          .select()
-          .single();
-
-        if (error) {
-          console.error('Error creating default workspace:', error);
-          throw error;
-        }
-        
-        // Also create the workspace_member record manually
-        const { error: memberError } = await supabase
-          .from('workspace_members')
-          .insert({
-            workspace_id: data.id,
-            user_id: user.id,
-            role: 'owner'
-          });
-          
-        if (memberError) {
-          console.error('Error creating workspace member:', memberError);
-        }
-        
-        // Create a welcome page
-        const { error: pageError } = await supabase
-          .from('pages')
-          .insert({
-            title: 'Welcome to your workspace',
-            content: {
-              type: 'doc',
-              content: [
-                {
-                  type: 'heading',
-                  attrs: { level: 1 },
-                  content: [{ type: 'text', text: 'Welcome to your new workspace!' }]
-                },
-                {
-                  type: 'paragraph',
-                  content: [{ type: 'text', text: 'This is your first page. You can edit it or create new pages using the sidebar.' }]
-                }
-              ]
-            },
-            workspace_id: data.id,
-            created_by: user.id,
-            position: 0,
-            is_favorite: false
-          });
-          
-        if (pageError) {
-          console.error('Error creating welcome page:', pageError);
-        }
-        
-        setWorkspaces([data]);
-        setCurrentWorkspace({ ...data, pages: [] });
-      } else {
-        // If workspaces exist but weren't fetched properly, try again
-        setTimeout(() => {
-          fetchWorkspaces();
-        }, 500);
+      // Create a welcome page
+      const { error: pageError } = await createDefaultPage(
+        workspaceId,
+        user.id,
+        'Welcome to your workspace'
+      );
+      
+      if (pageError) {
+        console.error('Error creating welcome page:', pageError);
       }
+      
+      // Fetch the newly created workspace
+      const { data: workspace, error: fetchError } = await supabase
+        .from('workspaces')
+        .select('*')
+        .eq('id', workspaceId)
+        .single();
+        
+      if (fetchError) {
+        console.error('Error fetching new workspace:', fetchError);
+        throw fetchError;
+      }
+      
+      setWorkspaces([workspace]);
+      setCurrentWorkspace({ ...workspace, pages: [] });
+      
+      // Fetch workspaces again to ensure everything is up to date
+      setTimeout(() => {
+        fetchWorkspaces();
+      }, 500);
     } catch (error: any) {
       console.error('Default workspace creation error:', error);
       toast.error('Error creating workspace. Please try again.');
@@ -294,60 +229,41 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     try {
       if (!user) throw new Error('User not authenticated');
       
-      // Create the workspace
-      const { data, error } = await supabase
-        .from('workspaces')
-        .insert({ 
-          name, 
-          owner_id: user.id 
-        })
-        .select()
-        .single();
-
-      if (error) {
-        console.error('Error creating workspace:', error);
-        throw error;
+      // Use the service role function to create a workspace
+      const { data: workspaceId, error: workspaceError } = await createWorkspaceWithMember(
+        name,
+        user.id
+      );
+      
+      if (workspaceError) {
+        console.error('Error creating workspace:', workspaceError);
+        throw workspaceError;
       }
       
-      // Create the workspace_member record
-      await supabase
-        .from('workspace_members')
-        .insert({
-          workspace_id: data.id,
-          user_id: user.id,
-          role: 'owner'
-        });
-      
       // Create a default page
-      await supabase
-        .from('pages')
-        .insert({
-          title: 'Getting Started',
-          content: {
-            type: 'doc',
-            content: [
-              {
-                type: 'heading',
-                attrs: { level: 1 },
-                content: [{ type: 'text', text: 'Welcome to your new workspace!' }]
-              },
-              {
-                type: 'paragraph',
-                content: [{ type: 'text', text: 'This is your first page. You can edit it or create new pages using the sidebar.' }]
-              }
-            ]
-          },
-          workspace_id: data.id,
-          created_by: user.id,
-          position: 0,
-          is_favorite: false
-        });
+      await createDefaultPage(
+        workspaceId,
+        user.id,
+        'Getting Started'
+      );
+      
+      // Fetch the newly created workspace
+      const { data: workspace, error: fetchError } = await supabase
+        .from('workspaces')
+        .select('*')
+        .eq('id', workspaceId)
+        .single();
+        
+      if (fetchError) {
+        console.error('Error fetching new workspace:', fetchError);
+        throw fetchError;
+      }
       
       // Update local state
-      setWorkspaces(prev => [data, ...prev]);
-      setCurrentWorkspace({ ...data, pages: [] });
+      setWorkspaces(prev => [workspace, ...prev]);
+      setCurrentWorkspace({ ...workspace, pages: [] });
       
-      return data;
+      return workspace;
     } catch (error: any) {
       console.error('Workspace creation error:', error);
       toast.error('Error creating workspace. Please try again.');
