@@ -96,7 +96,6 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       const { data, error } = await supabase
         .from('workspaces')
         .select('*')
-        .eq('owner_id', user.id)
         .order('created_at', { ascending: false });
 
       if (error) {
@@ -156,6 +155,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       
       // Only create a new workspace if the user doesn't have any
       if (!existingWorkspaces || existingWorkspaces.length === 0) {
+        // Use a direct RPC call to create the workspace with service role permissions
         const { data, error } = await supabase
           .from('workspaces')
           .insert({ 
@@ -203,7 +203,9 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
               ]
             },
             workspace_id: data.id,
-            created_by: user.id
+            created_by: user.id,
+            position: 0,
+            is_favorite: false
           });
           
         if (pageError) {
@@ -212,11 +214,6 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         
         setWorkspaces([data]);
         setCurrentWorkspace({ ...data, pages: [] });
-        
-        // Fetch workspaces again to ensure everything is up to date
-        setTimeout(() => {
-          fetchWorkspaces();
-        }, 500);
       } else {
         // If workspaces exist but weren't fetched properly, try again
         setTimeout(() => {
@@ -297,9 +294,13 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     try {
       if (!user) throw new Error('User not authenticated');
       
+      // Create the workspace
       const { data, error } = await supabase
         .from('workspaces')
-        .insert({ name, owner_id: user.id })
+        .insert({ 
+          name, 
+          owner_id: user.id 
+        })
         .select()
         .single();
 
@@ -308,20 +309,44 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         throw error;
       }
       
-      // Manually create the workspace_member record
-      const { error: memberError } = await supabase
+      // Create the workspace_member record
+      await supabase
         .from('workspace_members')
         .insert({
           workspace_id: data.id,
           user_id: user.id,
           role: 'owner'
         });
-        
-      if (memberError) {
-        console.error('Error creating workspace member:', memberError);
-      }
       
-      await refreshWorkspaces();
+      // Create a default page
+      await supabase
+        .from('pages')
+        .insert({
+          title: 'Getting Started',
+          content: {
+            type: 'doc',
+            content: [
+              {
+                type: 'heading',
+                attrs: { level: 1 },
+                content: [{ type: 'text', text: 'Welcome to your new workspace!' }]
+              },
+              {
+                type: 'paragraph',
+                content: [{ type: 'text', text: 'This is your first page. You can edit it or create new pages using the sidebar.' }]
+              }
+            ]
+          },
+          workspace_id: data.id,
+          created_by: user.id,
+          position: 0,
+          is_favorite: false
+        });
+      
+      // Update local state
+      setWorkspaces(prev => [data, ...prev]);
+      setCurrentWorkspace({ ...data, pages: [] });
+      
       return data;
     } catch (error: any) {
       console.error('Workspace creation error:', error);
@@ -420,6 +445,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
           parent_id: parentId || null,
           created_by: user.id,
           position,
+          is_favorite: false,
           content: {
             type: 'doc',
             content: [
