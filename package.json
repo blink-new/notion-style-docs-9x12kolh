@@ -80,7 +80,8 @@
     "@tiptap/extension-strike": "latest",
     "@tiptap/extension-code": "latest",
     "@tiptap/react": "latest",
-    "react-router-dom": "latest"
+    "react-router-dom": "latest",
+    "@tiptap/starter-kit": "latest"
   },
   "devDependencies": {
     "@eslint/js": "^9.21.0",
