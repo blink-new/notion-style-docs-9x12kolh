@@ -32,8 +32,23 @@ export const supabaseAdmin = createClient<Database>(
   supabaseServiceKey || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9pYmN5ZWl1enVhaml4cmRrcWxqIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0NTAxMDg4NiwiZXhwIjoyMDYwNTg2ODg2fQ.hyvaANDGe49dZzK2gOaKQbERMQFYTvaLSurKlNoipsc'
 );
 
+// Ensure user exists in the public.users table
+export const ensureUserExists = async (userId: string) => {
+  return supabaseAdmin.rpc('ensure_user_exists', {
+    p_user_id: userId
+  });
+};
+
 // Create a function to call the initialize_new_user RPC
 export const initializeNewUser = async (userId: string, workspaceName: string = 'My Workspace') => {
+  // First ensure the user exists
+  const { error: userError } = await ensureUserExists(userId);
+  
+  if (userError) {
+    console.error('Error ensuring user exists:', userError);
+    throw userError;
+  }
+  
   return supabaseAdmin.rpc('initialize_new_user', {
     p_user_id: userId,
     p_workspace_name: workspaceName
@@ -42,6 +57,14 @@ export const initializeNewUser = async (userId: string, workspaceName: string = 
 
 // Create a function to call the create_workspace_with_member RPC
 export const createWorkspaceWithMember = async (name: string, ownerId: string) => {
+  // First ensure the user exists
+  const { error: userError } = await ensureUserExists(ownerId);
+  
+  if (userError) {
+    console.error('Error ensuring user exists:', userError);
+    throw userError;
+  }
+  
   return supabaseAdmin.rpc('create_workspace_with_member', {
     p_name: name,
     p_owner_id: ownerId
