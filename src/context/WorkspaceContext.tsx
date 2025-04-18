@@ -1,6 +1,13 @@
 
 import { createContext, useContext, useEffect, useState } from 'react';
-import { supabase, createWorkspaceWithMember, createDefaultPage } from '../lib/supabase';
+import { 
+  supabase, 
+  supabaseAdmin, 
+  createWorkspaceWithMember, 
+  createDefaultPage, 
+  ensureUserExists,
+  initializeNewUser
+} from '../lib/supabase';
 import { useAuth } from './AuthContext';
 import { Page, PageWithChildren, Workspace, WorkspaceWithPages } from '../types';
 import { toast } from 'react-hot-toast';
@@ -64,6 +71,15 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     try {
       setLoading(true);
       
+      // First ensure the user exists in the public.users table
+      console.log('Ensuring user exists:', user.id);
+      const { error: userError } = await ensureUserExists(user.id);
+      
+      if (userError) {
+        console.error('Error ensuring user exists:', userError);
+        throw userError;
+      }
+      
       // Fetch all workspaces the user has access to
       const { data, error } = await supabase
         .from('workspaces')
@@ -114,27 +130,28 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     try {
       console.log('Creating default workspace for user:', user.id);
       
-      // Use the service role function to create a workspace
-      const { data: workspaceId, error: workspaceError } = await createWorkspaceWithMember(
-        'My Workspace',
-        user.id
-      );
+      // First ensure the user exists in the public.users table
+      console.log('Ensuring user exists before creating workspace');
+      const { error: userError } = await ensureUserExists(user.id);
       
-      if (workspaceError) {
-        console.error('Error creating default workspace:', workspaceError);
-        throw workspaceError;
+      if (userError) {
+        console.error('Error ensuring user exists:', userError);
+        throw userError;
       }
       
-      // Create a welcome page
-      const { error: pageError } = await createDefaultPage(
-        workspaceId,
+      // Use the initialize_new_user function which handles everything
+      console.log('Initializing new user with workspace');
+      const { data: workspaceId, error: initError } = await initializeNewUser(
         user.id,
-        'Welcome to your workspace'
+        'My Workspace'
       );
       
-      if (pageError) {
-        console.error('Error creating welcome page:', pageError);
+      if (initError) {
+        console.error('Error initializing user with workspace:', initError);
+        throw initError;
       }
+      
+      console.log('Successfully created workspace with ID:', workspaceId);
       
       // Fetch the newly created workspace
       const { data: workspace, error: fetchError } = await supabase
@@ -158,6 +175,95 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     } catch (error: any) {
       console.error('Default workspace creation error:', error);
       toast.error('Error creating workspace. Please try again.');
+      
+      // As a last resort, try to directly insert the user and workspace using the admin client
+      try {
+        console.log('Attempting direct user and workspace creation as fallback');
+        
+        // Get user details from auth.users
+        const { data: authUser, error: authError } = await supabaseAdmin
+          .from('auth.users')
+          .select('email, raw_user_meta_data')
+          .eq('id', user.id)
+          .single();
+          
+        if (authError) {
+          console.error('Error fetching auth user:', authError);
+          return;
+        }
+        
+        // Insert user directly
+        const { error: insertUserError } = await supabaseAdmin
+          .from('users')
+          .insert({
+            id: user.id,
+            email: user.email || '',
+            display_name: user.user_metadata?.name || user.email?.split('@')[0] || 'User'
+          })
+          .single();
+          
+        if (insertUserError && !insertUserError.message.includes('duplicate key')) {
+          console.error('Error inserting user:', insertUserError);
+          return;
+        }
+        
+        // Insert workspace directly
+        const { data: workspace, error: insertWorkspaceError } = await supabaseAdmin
+          .from('workspaces')
+          .insert({
+            name: 'My Workspace',
+            owner_id: user.id
+          })
+          .select()
+          .single();
+          
+        if (insertWorkspaceError) {
+          console.error('Error inserting workspace:', insertWorkspaceError);
+          return;
+        }
+        
+        // Insert workspace member
+        await supabaseAdmin
+          .from('workspace_members')
+          .insert({
+            workspace_id: workspace.id,
+            user_id: user.id,
+            role: 'owner'
+          });
+          
+        // Insert default page
+        await supabaseAdmin
+          .from('pages')
+          .insert({
+            title: 'Welcome to your workspace',
+            workspace_id: workspace.id,
+            created_by: user.id,
+            content: {
+              type: 'doc',
+              content: [
+                {
+                  type: 'heading',
+                  attrs: { level: 1 },
+                  content: [{ type: 'text', text: 'Welcome to your new workspace!' }]
+                },
+                {
+                  type: 'paragraph',
+                  content: [{ type: 'text', text: 'This is your first page. You can edit it or create new pages using the sidebar.' }]
+                }
+              ]
+            }
+          });
+          
+        setWorkspaces([workspace]);
+        setCurrentWorkspace({ ...workspace, pages: [] });
+        
+        // Fetch workspaces again to ensure everything is up to date
+        setTimeout(() => {
+          fetchWorkspaces();
+        }, 500);
+      } catch (fallbackError: any) {
+        console.error('Fallback workspace creation error:', fallbackError);
+      }
     }
   };
 
@@ -229,7 +335,17 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     try {
       if (!user) throw new Error('User not authenticated');
       
+      // First ensure the user exists in the public.users table
+      console.log('Ensuring user exists before creating workspace');
+      const { error: userError } = await ensureUserExists(user.id);
+      
+      if (userError) {
+        console.error('Error ensuring user exists:', userError);
+        throw userError;
+      }
+      
       // Use the service role function to create a workspace
+      console.log('Creating workspace with member');
       const { data: workspaceId, error: workspaceError } = await createWorkspaceWithMember(
         name,
         user.id
@@ -241,6 +357,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       }
       
       // Create a default page
+      console.log('Creating default page');
       await createDefaultPage(
         workspaceId,
         user.id,
@@ -248,6 +365,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       );
       
       // Fetch the newly created workspace
+      console.log('Fetching new workspace');
       const { data: workspace, error: fetchError } = await supabase
         .from('workspaces')
         .select('*')
