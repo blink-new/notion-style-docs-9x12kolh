@@ -3,9 +3,15 @@ import { createClient } from '@supabase/supabase-js';
 import { Database } from '../types/supabase';
 
 // For Vite, environment variables must be prefixed with VITE_
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-const supabaseServiceKey = import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY;
+// Try to get the variables with VITE_ prefix first, then fall back to non-prefixed versions
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://oibcyeiuzuajixrdkqlj.supabase.co';
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9pYmN5ZWl1enVhaml4cmRrcWxqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDUwMTA4ODYsImV4cCI6MjA2MDU4Njg4Nn0.jF3eoKs4BUt4Bn1TOZL4JoTdE6Fn9qWizBssFWY11BE';
+const supabaseServiceKey = import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9pYmN5ZWl1enVhaml4cmRrcWxqIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0NTAxMDg4NiwiZXhwIjoyMDYwNTg2ODg2fQ.hyvaANDGe49dZzK2gOaKQbERMQFYTvaLSurKlNoipsc';
+
+// Validate environment variables
+if (!supabaseUrl) {
+  console.error('Supabase URL is required. Please check your environment variables.');
+}
 
 // Create Supabase client
 export const supabase = createClient<Database>(
