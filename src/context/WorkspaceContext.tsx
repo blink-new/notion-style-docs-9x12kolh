@@ -44,6 +44,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const [currentPage, setCurrentPage] = useState<Page | null>(null);
   const [loading, setLoading] = useState(true);
   const [fetchAttempts, setFetchAttempts] = useState(0);
+  const [isInitialized, setIsInitialized] = useState(false);
 
   // Fetch workspaces when user changes
   useEffect(() => {
@@ -55,6 +56,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       setPages([]);
       setCurrentPage(null);
       setLoading(false);
+      setIsInitialized(false);
     }
   }, [user]);
 
@@ -73,6 +75,17 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
 
     try {
       setLoading(true);
+      
+      // Ensure user exists in public.users table first
+      if (!isInitialized) {
+        try {
+          await ensureUserRecord();
+          setIsInitialized(true);
+        } catch (error) {
+          console.error('Error ensuring user record:', error);
+          // Continue anyway - we'll try to fetch workspaces
+        }
+      }
       
       // Fetch all workspaces the user has access to
       const { data, error } = await supabase
@@ -113,9 +126,40 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     } catch (error: any) {
       console.error('Workspace fetch error:', error);
       toast.error('Error loading workspaces. Please try again.');
-      setLoading(false); // Ensure loading is set to false even on error
     } finally {
       setLoading(false);
+    }
+  };
+
+  const ensureUserRecord = async () => {
+    if (!user) return;
+    
+    try {
+      // First check if user exists
+      const { data, error } = await supabase
+        .from('users')
+        .select('id')
+        .eq('id', user.id)
+        .single();
+        
+      if (error || !data) {
+        // User doesn't exist, create them
+        const { error: insertError } = await supabase
+          .from('users')
+          .insert({
+            id: user.id,
+            email: user.email,
+            display_name: user.email?.split('@')[0] || 'User'
+          });
+          
+        if (insertError) {
+          console.error('Error creating user record:', insertError);
+          throw insertError;
+        }
+      }
+    } catch (error) {
+      console.error('Error in ensureUserRecord:', error);
+      throw error;
     }
   };
 
@@ -126,12 +170,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       console.log('Creating default workspace for user:', user.id);
       
       // First ensure the user exists in the public.users table
-      const { error: userError } = await ensureUserExists(user.id);
-      
-      if (userError) {
-        console.error('Error ensuring user exists:', userError);
-        // Continue anyway - we'll try direct creation
-      }
+      await ensureUserRecord();
       
       // Create workspace directly
       const { data: workspace, error: createError } = await supabase
@@ -200,7 +239,6 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     } catch (error: any) {
       console.error('Default workspace creation error:', error);
       toast.error('Error creating workspace. Please try again.');
-      setLoading(false); // Ensure loading is set to false even on error
     }
   };
 
@@ -451,6 +489,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       }
       
       await refreshPages();
+      setCurrentPage(data);
       return data;
     } catch (error: any) {
       console.error('Page creation error:', error);
